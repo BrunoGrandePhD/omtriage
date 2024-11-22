@@ -39,6 +39,7 @@ poetry run omtriage /path/to/sd/card /path/to/output/directory
 - `--dry-run`: Preview what would be imported without making changes
 - `--force-reimport`: Force reimport of previously imported files
 - `--log-level {DEBUG,INFO,WARNING,ERROR}`: Set logging verbosity
+- `--db-path PATH`: Custom path for the database file (default: ~/.omtriage/import_history.db)
 
 ### Output Structure
 
@@ -60,7 +61,7 @@ output_directory/
 - Files are organized by date and session (AM/PM)
 - Images and videos are separated into different folders
 - Multiple sessions on the same day are numbered (e.g., AM-1, AM-2)
-- Import history is maintained in a SQLite database
+- Import history is maintained in `~/.omtriage/import_history.db` (configurable)
 
 ## Development
 

@@ -5,9 +5,9 @@ import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
-from .constants import DB_SCHEMA
+from .constants import DB_SCHEMA, DEFAULT_DB_PATH
 from .models import MediaFile
 
 logger = logging.getLogger(__name__)
@@ -16,9 +16,21 @@ logger = logging.getLogger(__name__)
 class ImportDatabase:
     """Manages the database of imported files."""
 
-    def __init__(self, output_dir: Path):
-        """Initialize database in the output directory."""
-        self.db_path = output_dir / ".import_history.db"
+    def __init__(self, output_dir: Optional[Path] = None, db_path: Optional[Union[Path, str]] = None):
+        """Initialize database.
+        
+        Args:
+            output_dir: Legacy parameter for backward compatibility
+            db_path: Custom path for the database file. If not provided,
+                    uses ~/.omtriage/import_history.db
+        """
+        if db_path is not None:
+            self.db_path = Path(db_path)
+        else:
+            self.db_path = DEFAULT_DB_PATH
+            
+        # Create parent directory if it doesn't exist
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_database()
 
     def _init_database(self) -> None:

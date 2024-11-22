@@ -6,6 +6,7 @@ import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List
+import os
 
 import pytest
 
@@ -30,6 +31,35 @@ def output_dir(temp_dir):
     out_dir = temp_dir / "output"
     out_dir.mkdir()
     return out_dir
+
+
+@pytest.fixture
+def test_files(tmp_path):
+    """Create test image files with different timestamps."""
+    files_data = [
+        ("IMG_001.JPG", "2024-01-01 09:00:00"),
+        ("IMG_002.JPG", "2024-01-01 09:30:00"),
+        ("IMG_003.JPG", "2024-01-01 14:30:00"),  # Afternoon
+        ("IMG_004.JPG", "2024-01-01 15:00:00"),  # Afternoon
+        ("IMG_005.JPG", "2024-01-02 09:00:00"),  # Next day
+    ]
+    
+    files = []
+    for filename, timestamp in files_data:
+        file_path = tmp_path / filename
+        file_path.write_bytes(b"test data")
+        dt = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
+        ts = dt.timestamp()
+        os.utime(file_path, (ts, ts))
+        files.append(file_path)
+    
+    return files
+
+
+@pytest.fixture
+def test_groups(test_files):
+    """Create test media groups."""
+    return [test_file for test_file in test_files]
 
 
 @pytest.fixture
@@ -99,15 +129,27 @@ def mock_files(mock_sd_card):
 
 def _create_mock_exif(file_path: Path, capture_time: datetime):
     """Create mock exiftool output for a file."""
-    exif_data = [{
-        "SourceFile": str(file_path),
-        "DateTimeOriginal": capture_time.strftime("%Y:%m:%d %H:%M:%S"),
-        "CreateDate": capture_time.strftime("%Y:%m:%d %H:%M:%S")
-    }]
+    if capture_time is None:
+        exif_data = [{
+            "SourceFile": str(file_path),
+            "Error": "Invalid date format"
+        }]
+    else:
+        exif_data = [{
+            "SourceFile": str(file_path),
+            "DateTimeOriginal": capture_time.strftime("%Y:%m:%d %H:%M:%S"),
+            "CreateDate": capture_time.strftime("%Y:%m:%d %H:%M:%S")
+        }]
     
     # Write mock exiftool output
     exif_path = file_path.parent / f"{file_path.name}_exif.json"
     exif_path.write_text(json.dumps(exif_data))
+
+
+@pytest.fixture
+def create_mock_exif():
+    """Fixture to expose mock EXIF creation functionality to tests."""
+    return _create_mock_exif
 
 
 @pytest.fixture

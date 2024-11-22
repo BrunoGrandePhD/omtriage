@@ -4,4 +4,9 @@ Photo Importer Package
 A tool for organizing photos and videos from camera SD cards into structured directories.
 """
 
-__version__ = "0.2.0"
+from importlib.metadata import version
+
+try:
+    __version__ = version("omtriage")
+except Exception:
+    __version__ = "undefined"

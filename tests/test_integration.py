@@ -32,7 +32,7 @@ def test_full_import_workflow(mock_sd_card, output_dir, mock_files, mock_exiftoo
     assert stats["unique_days"] == 2
 
 
-def test_incremental_import(mock_sd_card, output_dir, mock_exiftool):
+def test_incremental_import(mock_sd_card, output_dir, mock_exiftool, create_mock_exif):
     """Test importing files in multiple batches."""
     # Create initial files
     base_time = datetime(2024, 1, 15, 10, 30)
@@ -53,7 +53,7 @@ def test_incremental_import(mock_sd_card, output_dir, mock_exiftool):
     for file_info in initial_files:
         path = mock_sd_card / file_info["name"]
         path.write_bytes(b"x" * file_info["size"])
-        _create_mock_exif(path, file_info["time"])
+        create_mock_exif(path, file_info["time"])
     
     # First import
     import_files(mock_sd_card, output_dir)
@@ -70,7 +70,7 @@ def test_incremental_import(mock_sd_card, output_dir, mock_exiftool):
     for file_info in new_files:
         path = mock_sd_card / file_info["name"]
         path.write_bytes(b"x" * file_info["size"])
-        _create_mock_exif(path, file_info["time"])
+        create_mock_exif(path, file_info["time"])
     
     # Second import
     import_files(mock_sd_card, output_dir)
@@ -88,7 +88,7 @@ def test_incremental_import(mock_sd_card, output_dir, mock_exiftool):
 
 
 def test_reimport_with_modifications(
-    mock_sd_card, output_dir, mock_files, mock_exiftool
+    mock_sd_card, output_dir, mock_files, mock_exiftool, create_mock_exif
 ):
     """Test reimporting with modified files."""
     # Initial import
@@ -106,12 +106,12 @@ def test_reimport_with_modifications(
     assert imported_file.stat().st_size == 2048
 
 
-def test_error_recovery(mock_sd_card, output_dir, mock_exiftool):
+def test_error_recovery(mock_sd_card, output_dir, mock_exiftool, create_mock_exif):
     """Test recovery from errors during import."""
     # Create valid file
     valid_file = mock_sd_card / "valid.ORF"
     valid_file.write_bytes(b"x" * 1024)
-    _create_mock_exif(
+    create_mock_exif(
         valid_file,
         datetime(2024, 1, 15, 10, 30)
     )
@@ -119,7 +119,7 @@ def test_error_recovery(mock_sd_card, output_dir, mock_exiftool):
     # Create file that will cause metadata extraction to fail
     invalid_file = mock_sd_card / "invalid.ORF"
     invalid_file.write_bytes(b"x" * 1024)
-    _create_mock_exif(invalid_file, None)  # Invalid date
+    create_mock_exif(invalid_file, None)  # Invalid date
     
     # Import should continue despite error
     import_files(mock_sd_card, output_dir)
@@ -128,22 +128,3 @@ def test_error_recovery(mock_sd_card, output_dir, mock_exiftool):
     assert (
         output_dir / "2024-01-15-AM/images/valid.ORF"
     ).exists()
-
-
-def _create_mock_exif(file_path: Path, capture_time: datetime):
-    """Create mock exiftool output for a file."""
-    if capture_time is None:
-        exif_data = [{
-            "SourceFile": str(file_path),
-            "Error": "Invalid date format"
-        }]
-    else:
-        exif_data = [{
-            "SourceFile": str(file_path),
-            "DateTimeOriginal": capture_time.strftime("%Y:%m:%d %H:%M:%S"),
-            "CreateDate": capture_time.strftime("%Y:%m:%d %H:%M:%S")
-        }]
-    
-    # Write mock exiftool output
-    exif_path = file_path.parent / f"{file_path.name}_exif.json"
-    exif_path.write_text(json.dumps(exif_data))

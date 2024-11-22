@@ -77,3 +77,5 @@ def _update_file_metadata(file: MediaFile, metadata: Dict) -> None:
     if not file.capture_time:
         logger.warning(f"No valid capture time found for {file.path.name}")
         file.capture_time = file.creation_date
+        if not file.capture_time:
+            logger.error(f"No creation date available for {file.path.name}")
