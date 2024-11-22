@@ -1,7 +1,7 @@
 [tool.poetry]
-name = "photo-importer"
+name = "omtriage"
 version = "0.2.0"
-description = "A tool for organizing photos and videos from camera SD cards"
+description = "A tool for organizing photos and videos from OM Systems SD cards"
 authors = ["Bruno Grande <grandebruno1991@gmail.com>"]
 readme = "README.md"
 packages = [{include = "omtriage"}]
@@ -17,7 +17,7 @@ pytest-mock = "^3.12.0"
 pytest-cov = "^4.1.0"
 
 [tool.poetry.scripts]
-photo-import = "omtriage.cli:main"
+omtriage = "omtriage.cli:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
