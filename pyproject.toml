@@ -1,0 +1,29 @@
+[tool.poetry]
+name = "photo-importer"
+version = "0.2.0"
+description = "A tool for organizing photos and videos from camera SD cards"
+authors = ["Bruno Grande <grandebruno1991@gmail.com>"]
+readme = "README.md"
+packages = [{include = "photo_importer"}]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+rich = "^13.7.0"
+pyexiftool = "^0.5.6"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0.0"
+pytest-mock = "^3.12.0"
+pytest-cov = "^4.1.0"
+
+[tool.poetry.scripts]
+photo-import = "photo_importer.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v --cov=photo_importer --cov-report=term-missing"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
