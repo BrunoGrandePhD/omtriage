@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from photo_importer.database import ImportDatabase
-from photo_importer.models import MediaFile
+from omtriage.database import ImportDatabase
+from omtriage.models import MediaFile
 
 
 def test_database_initialization(output_dir):

@@ -4,8 +4,8 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from photo_importer.models import MediaFile, MediaGroup, Session, SessionType
-from photo_importer.organizer import (
+from omtriage.models import MediaFile, MediaGroup, Session, SessionType
+from omtriage.organizer import (
     group_files,
     organize_sessions,
     create_session_structure

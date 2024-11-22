@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from photo_importer.cli import import_files
-from photo_importer.database import ImportDatabase
+from omtriage.cli import import_files
+from omtriage.database import ImportDatabase
 
 
 def test_full_import_workflow(mock_sd_card, output_dir, mock_files, mock_exiftool):

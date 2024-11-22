@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from rich.console import Console
 
-from photo_importer.cli import find_media_files, import_files, setup_logging
+from omtriage.cli import find_media_files, import_files, setup_logging
 
 
 def test_setup_logging():

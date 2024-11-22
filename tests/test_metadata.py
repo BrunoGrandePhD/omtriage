@@ -4,8 +4,8 @@ from datetime import datetime
 
 import pytest
 
-from photo_importer.metadata import extract_metadata
-from photo_importer.models import MediaFile
+from omtriage.metadata import extract_metadata
+from omtriage.models import MediaFile
 
 
 def test_extract_metadata(mock_sd_card, mock_exiftool, mock_files):

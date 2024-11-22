@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from photo_importer.models import MediaFile, MediaGroup, Session, SessionType
+from omtriage.models import MediaFile, MediaGroup, Session, SessionType
 
 
 def test_session_type():
