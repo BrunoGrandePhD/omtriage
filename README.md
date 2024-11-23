@@ -15,9 +15,12 @@ A powerful tool for organizing photos and videos from camera SD cards with a foc
 
 ## Installation
 
-OMTriage requires Python 3.12 or later. Install using Poetry:
+OMTriage requires Python 3.12 or later and ExifTool. Install them as follows:
 
 ```bash
+# Install ExifTool (macOS)
+brew install exiftool
+
 # Install Poetry if you haven't already
 curl -sSL https://install.python-poetry.org | python3 -
 
