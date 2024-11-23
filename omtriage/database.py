@@ -16,9 +16,13 @@ logger = logging.getLogger(__name__)
 class ImportDatabase:
     """Manages the database of imported files."""
 
-    def __init__(self, output_dir: Optional[Path] = None, db_path: Optional[Union[Path, str]] = None):
+    def __init__(
+        self,
+        output_dir: Optional[Path] = None,
+        db_path: Optional[Union[Path, str]] = None,
+    ):
         """Initialize database.
-        
+
         Args:
             output_dir: Legacy parameter for backward compatibility
             db_path: Custom path for the database file. If not provided,
@@ -28,7 +32,7 @@ class ImportDatabase:
             self.db_path = Path(db_path)
         else:
             self.db_path = DEFAULT_DB_PATH
-            
+
         # Create parent directory if it doesn't exist
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_database()
@@ -53,14 +57,10 @@ class ImportDatabase:
         with self._get_db() as conn:
             cursor = conn.execute(
                 """
-                SELECT 1 FROM imported_files 
+                SELECT 1 FROM imported_files
                 WHERE filename = ? AND file_size = ? AND creation_date = ?
                 """,
-                (
-                    file.path.name,
-                    file.file_size,
-                    file.creation_date.isoformat()
-                )
+                (file.path.name, file.file_size, file.creation_date.isoformat()),
             )
             return cursor.fetchone() is not None
 
@@ -69,7 +69,7 @@ class ImportDatabase:
         with self._get_db() as conn:
             conn.execute(
                 """
-                INSERT INTO imported_files 
+                INSERT INTO imported_files
                 (filename, file_size, creation_date, original_name, capture_time, import_time)
                 VALUES (?, ?, ?, ?, ?, ?)
                 """,
@@ -79,8 +79,8 @@ class ImportDatabase:
                     file.creation_date.isoformat(),
                     file.path.name,
                     file.capture_time.isoformat() if file.capture_time else None,
-                    datetime.now().isoformat()
-                )
+                    datetime.now().isoformat(),
+                ),
             )
 
     def clear_history(self) -> None:
@@ -93,7 +93,7 @@ class ImportDatabase:
         with self._get_db() as conn:
             cursor = conn.execute(
                 """
-                SELECT 
+                SELECT
                     COUNT(*) as total_files,
                     SUM(CASE WHEN capture_time IS NOT NULL THEN 1 ELSE 0 END) as files_with_metadata,
                     COUNT(DISTINCT strftime('%Y-%m-%d', capture_time)) as unique_days,
@@ -103,8 +103,8 @@ class ImportDatabase:
             )
             row = cursor.fetchone()
             return {
-                'total_files': row[0],
-                'files_with_metadata': row[1],
-                'unique_days': row[2],
-                'total_size': row[3]
+                "total_files": row[0],
+                "files_with_metadata": row[1],
+                "unique_days": row[2],
+                "total_size": row[3],
             }

@@ -1,187 +1,129 @@
-"""Test configuration and fixtures."""
+"""Test fixtures for omtriage."""
 
-import json
-import shutil
-import subprocess
+import os
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, List
-import os
 
 import pytest
 
-
-@pytest.fixture
-def temp_dir(tmp_path):
-    """Create a temporary directory for tests."""
-    return tmp_path
+from tests.metadata_stub import StubMetadataExtractor
 
 
-@pytest.fixture
-def mock_sd_card(temp_dir):
-    """Create a mock SD card directory with sample files."""
-    sd_dir = temp_dir / "DCIM" / "100OLYMP"
-    sd_dir.mkdir(parents=True)
-    return sd_dir
+def create_media_files(
+    camera_dir: Path,
+    base_names: list[str],
+    formats: list[str],
+    base_time: datetime | None = None,
+    time_increment: timedelta = timedelta(minutes=1),
+) -> None:
+    """Create test media files with timestamps.
 
+    Args:
+        camera_dir: Directory to create files in
+        base_names: List of base names (e.g., ["_7164001", "_7164002"])
+        formats: List of formats (e.g., ["JPG", "ORF"])
+        base_time: Optional base time for files (defaults to current time)
+        time_increment: Time increment between base names (default: 1 minute)
+    """
+    timestamp = base_time or datetime.now()
 
-@pytest.fixture
-def output_dir(temp_dir):
-    """Create a temporary output directory."""
-    out_dir = temp_dir / "output"
-    out_dir.mkdir()
-    return out_dir
+    for base_name in base_names:
+        # Create all format variants with the same timestamp
+        for fmt in formats:
+            path = camera_dir / f"{base_name}.{fmt}"
+            path.touch()
+            os.utime(path, (timestamp.timestamp(), timestamp.timestamp()))
 
-
-@pytest.fixture
-def test_files(tmp_path):
-    """Create test image files with different timestamps."""
-    files_data = [
-        ("IMG_001.JPG", "2024-01-01 09:00:00"),
-        ("IMG_002.JPG", "2024-01-01 09:30:00"),
-        ("IMG_003.JPG", "2024-01-01 14:30:00"),  # Afternoon
-        ("IMG_004.JPG", "2024-01-01 15:00:00"),  # Afternoon
-        ("IMG_005.JPG", "2024-01-02 09:00:00"),  # Next day
-    ]
-    
-    files = []
-    for filename, timestamp in files_data:
-        file_path = tmp_path / filename
-        file_path.write_bytes(b"test data")
-        dt = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
-        ts = dt.timestamp()
-        os.utime(file_path, (ts, ts))
-        files.append(file_path)
-    
-    return files
+        # Increment timestamp for next base name
+        timestamp += time_increment
 
 
 @pytest.fixture
-def test_groups(test_files):
-    """Create test media groups."""
-    return [test_file for test_file in test_files]
+def metadata_extractor():
+    """Provide a stub metadata extractor for testing."""
+    yield StubMetadataExtractor()
 
 
 @pytest.fixture
-def mock_files(mock_sd_card):
-    """Create mock media files with different timestamps."""
-    files: List[Dict] = []
-    base_time = datetime(2024, 1, 15, 10, 30)  # 10:30 AM
-    
+def basic_media_dir(tmp_path):
+    """Create a simple media directory with a few test files.
+
+    Returns:
+        Path to input directory containing basic media files
+    """
+    camera_dir = tmp_path / "302OMSYS"
+    camera_dir.mkdir()
+
+    # Create a few simple test files
+    base_time = datetime(2023, 11, 1, 10, 30)  # 10:30 AM
+    files = [f"_7164{i:03d}" for i in range(1, 4)]
+    create_media_files(camera_dir, files, ["ORF"], base_time)
+
+    yield camera_dir
+
+
+@pytest.fixture
+def paired_media_dir(tmp_path):
+    """Create a media directory with paired files (JPG+ORF).
+
+    Returns:
+        Path to input directory containing paired media files
+    """
+    camera_dir = tmp_path / "302OMSYS"
+    camera_dir.mkdir()
+
+    # Create paired JPG+ORF files
+    base_time = datetime(2023, 11, 1, 10, 30)
+    files = [f"_7164{i:03d}" for i in range(1, 4)]
+    create_media_files(camera_dir, files, ["JPG", "ORF"], base_time)
+
+    yield camera_dir
+
+
+@pytest.fixture
+def continuous_session_dir(tmp_path):
+    """Create a media directory with a continuous session spanning AM/PM boundary.
+
+    Returns:
+        Path to input directory containing continuous session files
+    """
+    camera_dir = tmp_path / "302OMSYS"
+    camera_dir.mkdir()
+
+    # Create continuous session spanning 1:45 PM to 2:15 PM
+    start_time = datetime(2023, 11, 1, 13, 45)
+    files = [f"_7198{i:03d}" for i in range(461, 467)]
+    create_media_files(camera_dir, files, ["ORF"], start_time, timedelta(minutes=5))
+
+    yield camera_dir
+
+
+@pytest.fixture
+def multi_session_dir(tmp_path):
+    """Create a media directory with multiple sessions across different days.
+
+    Returns:
+        Path to input directory containing multi-session files
+    """
+    camera_dir = tmp_path / "302OMSYS"
+    camera_dir.mkdir()
+
+    base_date = datetime(2023, 11, 1)
+
     # Morning session (10:30 AM)
-    files.extend([
-        {
-            "name": "P1150001.ORF",
-            "time": base_time,
-            "size": 1024
-        },
-        {
-            "name": "P1150001.JPG",
-            "time": base_time,
-            "size": 512
-        },
-        {
-            "name": "P1150002.MOV",
-            "time": base_time + timedelta(minutes=5),
-            "size": 2048
-        }
-    ])
-    
-    # Afternoon session (3:30 PM)
-    base_time = datetime(2024, 1, 15, 15, 30)
-    files.extend([
-        {
-            "name": "P1150003.ORF",
-            "time": base_time,
-            "size": 1024
-        },
-        {
-            "name": "P1150003.JPG",
-            "time": base_time,
-            "size": 512
-        }
-    ])
-    
-    # Next day morning (9:30 AM)
-    base_time = datetime(2024, 1, 16, 9, 30)
-    files.extend([
-        {
-            "name": "P1160001.ORF",
-            "time": base_time,
-            "size": 1024
-        },
-        {
-            "name": "P1160001.JPG",
-            "time": base_time,
-            "size": 512
-        }
-    ])
-    
-    # Create the files
-    for file_info in files:
-        path = mock_sd_card / file_info["name"]
-        path.write_bytes(b"x" * file_info["size"])
-        # Create mock exiftool output
-        _create_mock_exif(path, file_info["time"])
-    
-    return files
+    morning_time = base_date.replace(hour=10, minute=30)
+    morning_files = [f"_7164{i:03d}" for i in range(1, 4)]
+    create_media_files(camera_dir, morning_files, ["JPG", "ORF"], morning_time)
 
+    # Afternoon session (2:45 PM)
+    afternoon_time = base_date.replace(hour=14, minute=45)
+    afternoon_files = [f"_7165{i:03d}" for i in range(190, 193)]
+    create_media_files(camera_dir, afternoon_files, ["JPG", "ORF"], afternoon_time)
 
-def _create_mock_exif(file_path: Path, capture_time: datetime):
-    """Create mock exiftool output for a file."""
-    if capture_time is None:
-        exif_data = [{
-            "SourceFile": str(file_path),
-            "Error": "Invalid date format"
-        }]
-    else:
-        exif_data = [{
-            "SourceFile": str(file_path),
-            "DateTimeOriginal": capture_time.strftime("%Y:%m:%d %H:%M:%S"),
-            "CreateDate": capture_time.strftime("%Y:%m:%d %H:%M:%S")
-        }]
-    
-    # Write mock exiftool output
-    exif_path = file_path.parent / f"{file_path.name}_exif.json"
-    exif_path.write_text(json.dumps(exif_data))
+    # Next day morning (9:15 AM)
+    next_day = base_date + timedelta(days=1)
+    morning_time = next_day.replace(hour=9, minute=15)
+    morning_files = [f"_7176{i:03d}" for i in range(557, 560)]
+    create_media_files(camera_dir, morning_files, ["MOV"], morning_time)
 
-
-@pytest.fixture
-def create_mock_exif():
-    """Fixture to expose mock EXIF creation functionality to tests."""
-    return _create_mock_exif
-
-
-@pytest.fixture
-def mock_exiftool(monkeypatch):
-    """Mock exiftool command to use our mock data."""
-    def mock_run(cmd, *args, **kwargs):
-        if cmd[0] != "exiftool":
-            return subprocess.run(cmd, *args, **kwargs)
-        
-        # Parse file paths from command
-        files = [Path(arg) for arg in cmd if not arg.startswith("-")]
-        
-        # Collect mock exif data
-        all_data = []
-        for file in files:
-            exif_path = file.parent / f"{file.name}_exif.json"
-            if exif_path.exists():
-                all_data.extend(json.loads(exif_path.read_text()))
-        
-        # Create mock CompletedProcess
-        return subprocess.CompletedProcess(
-            cmd, 0, 
-            stdout=json.dumps(all_data),
-            stderr=""
-        )
-    
-    monkeypatch.setattr(subprocess, "run", mock_run)
-
-
-@pytest.fixture(autouse=True)
-def cleanup(request, temp_dir):
-    """Clean up temporary files after each test."""
-    def cleanup_files():
-        shutil.rmtree(temp_dir)
-    request.addfinalizer(cleanup_files)
+    yield camera_dir
