@@ -99,15 +99,18 @@ def _are_on_same_device(path1: Path, path2: Path) -> bool:
 
 
 def create_session_structure(
-    session: Session, base_dir: Path, dry_run: bool = False, use_hardlinks: bool | None = None
+    session: Session,
+    base_dir: Path,
+    use_hardlinks: bool = False,
+    overwrite: bool = False,
 ) -> None:
     """Create directory structure for a session.
 
     Args:
         session: Session to create structure for
         base_dir: Base directory for organizing files
-        dry_run: If True, don't actually create any files or directories
-        use_hardlinks: If True, use hard links, if False use copies. If None, determine automatically.
+        use_hardlinks: If True, use hard links, if False use copies.
+        overwrite: If True, overwrite existing files
     """
     logger = logging.getLogger(__name__)
     logger.debug(f"Creating session structure in {base_dir}")
@@ -123,22 +126,10 @@ def create_session_structure(
     video_dir = base_dir / "videos" / session_name
     jpeg_dir = base_dir / "images" / "jpeg_duplicates" / session_name
 
-    if not dry_run:
-        image_dir.mkdir(parents=True, exist_ok=True)
-        video_dir.mkdir(parents=True, exist_ok=True)
-        jpeg_dir.mkdir(parents=True, exist_ok=True)
-        logger.debug(f"Created directories: {image_dir}, {video_dir}, and {jpeg_dir}")
-
-        # Determine if we should use hardlinks if not explicitly specified
-        if use_hardlinks is None:
-            # Check using the first file in the first group as reference
-            if session.groups and session.groups[0].files:
-                first_file = session.groups[0].files[0].path
-                use_hardlinks = _are_on_same_device(first_file, base_dir)
-                logger.info(
-                    f"{'Using hardlinks' if use_hardlinks else 'Using file copies'} "
-                    f"based on device check"
-                )
+    image_dir.mkdir(parents=True, exist_ok=True)
+    video_dir.mkdir(parents=True, exist_ok=True)
+    jpeg_dir.mkdir(parents=True, exist_ok=True)
+    logger.debug(f"Created directories: {image_dir}, {video_dir}, and {jpeg_dir}")
 
     # Copy files to appropriate directories
     for group in session.groups:
@@ -160,26 +151,28 @@ def create_session_structure(
             source = file.path
             target = target_dir / source.name
 
-            if not dry_run:
-                logger.debug(f"Copying {source.name} to {target}")
-                if target.exists():
-                    target.unlink()
+            if target.exists() and overwrite:
+                logger.debug(f"Overwriting: {target}")
+                target.unlink()
 
-                if use_hardlinks:
-                    target.hardlink_to(source)
-                else:
-                    shutil.copy2(source, target)
+            target_dir.mkdir(parents=True, exist_ok=True)
+            if use_hardlinks:
+                logger.debug(f"Hardlinking: {source.name} -> {target}")
+                target.hardlink_to(source)
+            else:
+                logger.debug(f"Copying: {source.name} -> {target}")
+                shutil.copy2(source, target)
 
-                # Create symbolic link to ORF file if this is a JPEG duplicate
-                if file is jpg_file and orf_file:
-                    orf_target = image_dir / orf_file.path.name
-                    symlink_target = jpeg_dir / f"original_{orf_file.path.name}"
-                    if symlink_target.exists():
-                        symlink_target.unlink()
-                    # Create relative symlink
-                    rel_path = os.path.relpath(orf_target, jpeg_dir)
-                    symlink_target.symlink_to(rel_path)
-                    logger.debug(f"Created symbolic link from {symlink_target} to {rel_path}")
+            # Create symbolic link to ORF file if this is a JPEG duplicate
+            if file is jpg_file and orf_file:
+                orf_target = image_dir / orf_file.path.name
+                symlink_target = jpeg_dir / f"original_{orf_file.path.name}"
+                if symlink_target.exists():
+                    symlink_target.unlink()
+                # Create relative symlink
+                rel_path = os.path.relpath(orf_target, jpeg_dir)
+                symlink_target.symlink_to(rel_path)
+                logger.debug(f"Created symbolic link from {symlink_target} to {rel_path}")
 
         # Clean up empty directories
         # Iterate over directories in reverse order to delete nested directories first

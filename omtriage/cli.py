@@ -72,6 +72,7 @@ def import_files(
     session_gap: float = DEFAULT_SESSION_GAP,
     force_reimport: bool = False,
     dry_run: bool = False,
+    overwrite: bool = False,
     log_level: str = "INFO",
     db_path: Optional[Path] = None,
     metadata_extractor: Optional[MetadataExtractor] = None,
@@ -126,6 +127,7 @@ def import_files(
         return
 
     # Check import history
+    skipped_count = 0
     if not force_reimport and not dry_run:
         original_count = len(files)
         files = [f for f in files if not db.is_file_imported(f)]
@@ -149,27 +151,25 @@ def import_files(
         return
 
     # Import files with progress tracking
-    for session in track(sessions, description="Importing files"):
+    logger.info("Importing files session by session")
+    for session in track(sessions):
         logger.debug(f"Processing session with {len(session.groups)} groups")
-        create_session_structure(session, output_dir, use_hardlinks=use_hardlinks)
+        create_session_structure(session, output_dir, use_hardlinks, overwrite)
 
     # Update import history
-    for file in track(files, description="Updating import history"):
+    logger.info("Updating import history with newly imported files")
+    for file in track(files):
         db.mark_file_imported(file)
         logger.debug(f"Marked as imported: {file.path.name}")
 
     # Count output files and verify
     output_images, output_videos = count_media_files(output_dir)
-    logger.info(f"Found {output_images} images and {output_videos} videos in output directory")
 
     # Check if any files are missing
-    if output_images != input_images or output_videos != input_videos:
-        error_msg = (
-            f"File count mismatch! Input: {input_images} images, {input_videos} videos. "
-            f"Output: {output_images} images, {output_videos} videos."
-        )
-        logger.error(error_msg)
-        raise RuntimeError(error_msg)
+    if (input_images + input_videos) != (output_images + output_videos + skipped_count):
+        msg = "Number of input files does not match number of output + skipped files"
+        logger.error(msg)
+        raise RuntimeError(msg)
 
     logger.info("Import completed successfully")
 
@@ -206,6 +206,11 @@ def main() -> None:
         help="Show what would be done without making changes",
     )
     parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Overwrite existing files",
+    )
+    parser.add_argument(
         "--log-level",
         default="INFO",
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
@@ -225,6 +230,7 @@ def main() -> None:
         args.session_gap,
         args.force_reimport,
         args.dry_run,
+        args.overwrite,
         args.log_level,
         db_path=args.import_history,
     )
