@@ -144,15 +144,15 @@ def create_session_structure(
                 # If this is a JPEG and we have an ORF file, put it in the jpeg_duplicates folder
                 if file is jpg_file and orf_file:
                     target_dir = jpeg_dir
-                    logger.debug(f"Found JPEG+ORF pair: {file.path.name} and {orf_file.path.name}")
+                    logger.debug(f"Found JPEG+ORF pair: {file.path} and {orf_file.path}")
                 else:
                     target_dir = image_dir
 
             source = file.path
-            target = target_dir / source.name
+            target = target_dir / file.output_name
 
             if target.exists() and overwrite:
-                logger.debug(f"Overwriting: {target}")
+                logger.debug(f"Overwriting file: {target}")
                 target.unlink()
 
             target_dir.mkdir(parents=True, exist_ok=True)
@@ -162,17 +162,6 @@ def create_session_structure(
             else:
                 logger.debug(f"Copying: {source.name} -> {target}")
                 shutil.copy2(source, target)
-
-            # Create symbolic link to ORF file if this is a JPEG duplicate
-            if file is jpg_file and orf_file:
-                orf_target = image_dir / orf_file.path.name
-                symlink_target = jpeg_dir / f"original_{orf_file.path.name}"
-                if symlink_target.exists():
-                    symlink_target.unlink()
-                # Create relative symlink
-                rel_path = os.path.relpath(orf_target, jpeg_dir)
-                symlink_target.symlink_to(rel_path)
-                logger.debug(f"Created symbolic link from {symlink_target} to {rel_path}")
 
         # Clean up empty directories
         # Iterate over directories in reverse order to delete nested directories first
