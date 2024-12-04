@@ -69,9 +69,12 @@ class ImportDatabase:
                 (file.path.name, file.file_size, file.creation_date.isoformat()),
             )
             result = cursor.fetchone() is not None
-            logger.debug(f"Checked import status for {file.path.name}: {'imported' if result else 'not imported'}")
+            logger.debug(
+                f"Checked import status for {file.path.name}: {'imported' if result else 'not imported'}"
+            )
             return result
 
+    # TODO: Improve database schema (e.g., two file name columns)
     def mark_file_imported(self, file: MediaFile) -> None:
         """Mark a file as imported in the database."""
         logger.debug(f"Marking file as imported: {file.path.name}")
