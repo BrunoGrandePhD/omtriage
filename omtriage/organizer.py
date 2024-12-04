@@ -180,3 +180,9 @@ def create_session_structure(
                     rel_path = os.path.relpath(orf_target, jpeg_dir)
                     symlink_target.symlink_to(rel_path)
                     logger.debug(f"Created symbolic link from {symlink_target} to {rel_path}")
+
+        # Clean up empty directories
+        # Iterate over directories in reverse order to delete nested directories first
+        for dirpath in sorted(base_dir.rglob("*/"), key=lambda p: p.parts, reverse=True):
+            if dirpath.is_dir() and not any(dirpath.iterdir()):
+                dirpath.rmdir()

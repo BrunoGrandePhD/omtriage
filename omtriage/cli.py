@@ -86,6 +86,14 @@ def import_files(
         f"  Dry run: {dry_run}"
     )
 
+    # Determine if we can use hardlinks (check once for all files)
+    use_hardlinks = _are_on_same_device(input_dir, output_dir)
+    if use_hardlinks:
+        msg = "Input and output directories are on the same drive, so hardlinks will be created."
+    else:
+        msg = "Input and output directories are on different drives, so copies will be created."
+    logger.info(msg)
+
     if not input_dir.exists():
         logger.error(f"Input directory does not exist: {input_dir}")
         return
@@ -132,20 +140,13 @@ def import_files(
     # Group and organize files
     groups = group_files(files)
     sessions = organize_sessions(groups, session_gap)
+    logger.info("Sessions:")
+    for session in sessions:
+        logger.info(f"  - {session.format_name()}")
 
     if dry_run:
-        logger.info("Sessions:")
-        for session in sessions:
-            logger.info(f"  - {session.format_name()}")
         logger.info("Dry run completed, no files were modified")
         return
-
-    # Determine if we can use hardlinks (check once for all files)
-    use_hardlinks = _are_on_same_device(input_dir, output_dir)
-    logger.info(
-        f"{'Using hardlinks' if use_hardlinks else 'Using file copies'} "
-        f"for all files (determined by comparing input and output directories)"
-    )
 
     # Import files with progress tracking
     for session in track(sessions, description="Importing files"):
@@ -156,16 +157,6 @@ def import_files(
     for file in track(files, description="Updating import history"):
         db.mark_file_imported(file)
         logger.debug(f"Marked as imported: {file.path.name}")
-
-    # Clean up empty directories
-    empty_dirs = 0
-    # Iterate over directories in reverse order to delete nested directories first
-    for dirpath in sorted(output_dir.rglob("*/"), key=lambda p: p.parts, reverse=True):
-        if dirpath.is_dir() and not any(dirpath.iterdir()):
-            dirpath.rmdir()
-            empty_dirs += 1
-    if empty_dirs > 0:
-        logger.debug(f"Removed {empty_dirs} empty directories")
 
     # Count output files and verify
     output_images, output_videos = count_media_files(output_dir)
