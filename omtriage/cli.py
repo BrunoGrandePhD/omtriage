@@ -1,38 +1,41 @@
 """Command-line interface for the photo importer."""
 
 import argparse
+import functools
 import logging
-import os
 from pathlib import Path
 from typing import Optional
 
-from rich.console import Console
-from rich.logging import RichHandler
-from tqdm import tqdm
-
 from . import __version__
-from .constants import ALL_FORMATS, DEFAULT_SESSION_GAP, SUPPORTED_FORMATS
+from .constants import DEFAULT_SESSION_GAP
 from .database import ImportDatabase
+from .logging import setup_logging, track
 from .metadata import ExiftoolMetadataExtractor, MediaFileFactory, MetadataExtractor
 from .models import MediaFile
-from .organizer import create_session_structure, group_files, organize_sessions
+from .organizer import _are_on_same_device, create_session_structure, group_files, organize_sessions
+from .utils import is_image_file, is_video_file
 
-console = Console()
+logger = logging.getLogger(__name__)
 
 
-def setup_logging(level: str) -> None:
-    """Configure logging with rich output."""
-    # Get the root logger and set its level
-    root_logger = logging.getLogger()
-    root_logger.setLevel(level.upper())
+@functools.lru_cache(maxsize=1)
+def _find_media_paths(directory: Path) -> list[Path]:
+    """Find all media files in a directory recursively.
 
-    # Configure the handler
-    handler = RichHandler(console=console, rich_tracebacks=True)
-    handler.setFormatter(logging.Formatter("%(message)s"))
+    Args:
+        directory: Directory to search in
 
-    # Remove any existing handlers and add our new one
-    root_logger.handlers.clear()
-    root_logger.addHandler(handler)
+    Returns:
+        List of paths to media files
+    """
+    logger.debug(f"Finding media files in {directory}")
+    media_paths = []
+    for path in directory.rglob("*"):
+        if path.is_symlink():
+            continue
+        if is_image_file(path) or is_video_file(path):
+            media_paths.append(path)
+    return media_paths
 
 
 def count_media_files(directory: Path) -> tuple[int, int]:
@@ -47,34 +50,19 @@ def count_media_files(directory: Path) -> tuple[int, int]:
     image_count = 0
     video_count = 0
 
-    for path in directory.rglob("*"):
-        if path.is_symlink():
-            continue
-        file = MediaFile(path)
-        if file.is_image:
+    for path in _find_media_paths(directory):
+        if is_image_file(path):
             image_count += 1
-        elif file.is_video:
+        else:  # Must be a video file since _find_media_paths only returns media files
             video_count += 1
 
+    logger.info(f"Found {image_count} images and {video_count} videos in {directory}")
     return image_count, video_count
 
 
-def find_media_files(input_dir: Path, factory: MediaFileFactory) -> list[MediaFile]:
+def create_media_files(input_dir: Path, factory: MediaFileFactory) -> list[MediaFile]:
     """Find supported media files in the input directory."""
-    logger = logging.getLogger(__name__)
-    logger.debug(f"Searching for media files in {input_dir}")
-
-    paths: list[Path] = []
-    # Use tqdm for progress tracking with conventional approach
-    for path in tqdm(
-        list(input_dir.rglob("*")), desc="Finding media files", unit="file"
-    ):
-        file = MediaFile(path)
-        if file.is_image or file.is_video:
-            paths.append(path)
-            logger.debug(f"Found supported file: {path.name}")
-
-    logger.debug(f"Found {len(paths)} supported files")
+    paths = _find_media_paths(input_dir)
     return factory.create_media_files(paths)
 
 
@@ -90,10 +78,12 @@ def import_files(
 ) -> None:
     """Import and organize media files."""
     setup_logging(log_level)
-    logger = logging.getLogger(__name__)
-    logger.info(f"Starting import from {input_dir} to {output_dir}")
-    logger.debug(
-        f"Session gap: {session_gap} hours, Force reimport: {force_reimport}, Dry run: {dry_run}"
+    logger.info("Starting import:\n" f"  {input_dir} -> {output_dir}")
+    logger.info(
+        f"Settings:\n"
+        f"  Session gap: {session_gap:.1f} hours\n"
+        f"  Force reimport: {force_reimport}\n"
+        f"  Dry run: {dry_run}"
     )
 
     if not input_dir.exists():
@@ -105,9 +95,7 @@ def import_files(
 
     # Count input files
     input_images, input_videos = count_media_files(input_dir)
-    logger.info(
-        f"Found {input_images} images and {input_videos} videos in input directory"
-    )
+    logger.debug(f"Found {input_images} images and {input_videos} videos in input directory")
 
     # Create output directory if it doesn't exist
     if not dry_run:
@@ -116,7 +104,7 @@ def import_files(
 
     # Initialize database
     db = ImportDatabase(db_path) if db_path else ImportDatabase()
-    logger.debug(f"Using database at: {db.db_path}")
+    logger.info(f"Using the import history stored in {db.db_path}")
 
     # Create factory with metadata extractor
     extractor = metadata_extractor or ExiftoolMetadataExtractor()
@@ -124,7 +112,7 @@ def import_files(
     logger.debug(f"Using metadata extractor: {extractor.__class__.__name__}")
 
     # Find media files
-    files = find_media_files(input_dir, factory)
+    files = create_media_files(input_dir, factory)
     if not files:
         logger.info("No media files found")
         return
@@ -143,21 +131,29 @@ def import_files(
 
     # Group and organize files
     groups = group_files(files)
-    logger.debug(f"Created {len(groups)} file groups")
     sessions = organize_sessions(groups, session_gap)
-    logger.debug(f"Organized into {len(sessions)} sessions")
 
     if dry_run:
+        logger.info("Sessions:")
+        for session in sessions:
+            logger.info(f"  - {session.format_name()}")
         logger.info("Dry run completed, no files were modified")
         return
 
+    # Determine if we can use hardlinks (check once for all files)
+    use_hardlinks = _are_on_same_device(input_dir, output_dir)
+    logger.info(
+        f"{'Using hardlinks' if use_hardlinks else 'Using file copies'} "
+        f"for all files (determined by comparing input and output directories)"
+    )
+
     # Import files with progress tracking
-    for session in tqdm(sessions, desc="Importing files", unit="session"):
+    for session in track(sessions, description="Importing files"):
         logger.debug(f"Processing session with {len(session.groups)} groups")
-        create_session_structure(session, output_dir)
+        create_session_structure(session, output_dir, use_hardlinks=use_hardlinks)
 
     # Update import history
-    for file in tqdm(files, desc="Updating import history", unit="file"):
+    for file in track(files, description="Updating import history"):
         db.mark_file_imported(file)
         logger.debug(f"Marked as imported: {file.path.name}")
 
@@ -173,9 +169,7 @@ def import_files(
 
     # Count output files and verify
     output_images, output_videos = count_media_files(output_dir)
-    logger.info(
-        f"Found {output_images} images and {output_videos} videos in output directory"
-    )
+    logger.info(f"Found {output_images} images and {output_videos} videos in output directory")
 
     # Check if any files are missing
     if output_images != input_images or output_videos != input_videos:

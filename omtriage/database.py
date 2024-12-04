@@ -33,24 +33,30 @@ class ImportDatabase:
         else:
             self.db_path = DEFAULT_DB_PATH
 
+        logger.debug(f"Initializing database at {self.db_path}")
         # Create parent directory if it doesn't exist
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_database()
 
     def _init_database(self) -> None:
         """Initialize the SQLite database for tracking imported files."""
+        logger.debug("Initializing database schema")
         with self._get_db() as conn:
             conn.executescript(DB_SCHEMA)
+        logger.debug("Database schema initialized successfully")
 
     @contextmanager
     def _get_db(self):
         """Context manager for database connections."""
+        logger.debug(f"Opening database connection to {self.db_path}")
         conn = sqlite3.connect(self.db_path)
         try:
             yield conn
             conn.commit()
+            logger.debug("Database transaction committed")
         finally:
             conn.close()
+            logger.debug("Database connection closed")
 
     def is_file_imported(self, file: MediaFile) -> bool:
         """Check if a file has already been imported."""
@@ -62,10 +68,13 @@ class ImportDatabase:
                 """,
                 (file.path.name, file.file_size, file.creation_date.isoformat()),
             )
-            return cursor.fetchone() is not None
+            result = cursor.fetchone() is not None
+            logger.debug(f"Checked import status for {file.path.name}: {'imported' if result else 'not imported'}")
+            return result
 
     def mark_file_imported(self, file: MediaFile) -> None:
         """Mark a file as imported in the database."""
+        logger.debug(f"Marking file as imported: {file.path.name}")
         with self._get_db() as conn:
             conn.execute(
                 """
@@ -82,14 +91,18 @@ class ImportDatabase:
                     datetime.now().isoformat(),
                 ),
             )
+        logger.debug(f"Successfully marked {file.path.name} as imported")
 
     def clear_history(self) -> None:
         """Clear all import history."""
+        logger.info("Clearing all import history")
         with self._get_db() as conn:
             conn.execute("DELETE FROM imported_files")
+        logger.info("Import history cleared successfully")
 
     def get_import_stats(self) -> dict:
         """Get statistics about imported files."""
+        logger.debug("Retrieving import statistics")
         with self._get_db() as conn:
             cursor = conn.execute(
                 """
@@ -102,9 +115,11 @@ class ImportDatabase:
                 """
             )
             row = cursor.fetchone()
-            return {
+            stats = {
                 "total_files": row[0],
                 "files_with_metadata": row[1],
                 "unique_days": row[2],
                 "total_size": row[3],
             }
+            logger.debug(f"Retrieved import statistics: {stats}")
+            return stats

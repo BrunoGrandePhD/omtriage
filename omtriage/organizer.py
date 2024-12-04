@@ -3,10 +3,9 @@
 import logging
 import os
 import shutil
-from datetime import datetime, timedelta
 from itertools import groupby
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List
 
 from .constants import AFTERNOON_HOUR, DEFAULT_SESSION_GAP
 from .models import MediaFile, MediaGroup, Session, SessionType
@@ -16,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 def group_files(files: List[MediaFile]) -> List[MediaGroup]:
     """Group related files (e.g., ORF+JPEG pairs)."""
-    logger.debug(f"Grouping {len(files)} files")
+    logger.info(f"Grouping {len(files)} files by capture (e.g., OFR+JPEG pairs)")
 
     # Sort files by name without extension to group related files
     sorted_files = sorted(files, key=lambda f: f.path.stem)
@@ -26,7 +25,7 @@ def group_files(files: List[MediaFile]) -> List[MediaGroup]:
         logger.debug(f"Created new group for {key}")
         groups.append(MediaGroup(list(related_files)))
 
-    logger.debug(f"Created {len(groups)} file groups")
+    logger.info(f"Identified {len(groups)} captures")
     return groups
 
 
@@ -34,16 +33,13 @@ def organize_sessions(
     groups: List[MediaGroup], session_gap: float = DEFAULT_SESSION_GAP
 ) -> List[Session]:
     """Organize media groups into sessions based on capture time gaps."""
-    logger.debug(
-        f"Organizing {len(groups)} groups into sessions with {session_gap} hour gap"
-    )
-
     if not groups:
         logger.debug("No groups to organize")
         return []
 
+    logger.info(f"Organizing {len(groups)} captures into sessions")
     sorted_groups = sorted(groups, key=lambda g: g.capture_time)
-    logger.debug(f"Sorted {len(sorted_groups)} groups by capture time")
+    logger.debug(f"Sorted {len(sorted_groups)} captures by capture time")
 
     sessions: List[Session] = []
     current_groups: List[MediaGroup] = [sorted_groups[0]]
@@ -75,7 +71,7 @@ def organize_sessions(
     if current_groups:
         sessions.append(Session(current_groups, current_type))
 
-    logger.debug(f"Created {len(sessions)} sessions")
+    logger.info(f"Identified {len(sessions)} sessions")
     # Number sessions on the same day
     _number_sessions(sessions)
 
@@ -95,10 +91,24 @@ def _number_sessions(sessions: List[Session]) -> None:
                 session.number = i
 
 
+def _are_on_same_device(path1: Path, path2: Path) -> bool:
+    """Check if two paths are on the same device/disk."""
+    # Ensure parent directory exists for path2 since it might not exist yet
+    path2_stat = os.stat(path2.parent) if not path2.exists() else os.stat(path2)
+    return os.stat(path1).st_dev == path2_stat.st_dev
+
+
 def create_session_structure(
-    session: Session, base_dir: Path, dry_run: bool = False
+    session: Session, base_dir: Path, dry_run: bool = False, use_hardlinks: bool | None = None
 ) -> None:
-    """Create directory structure for a session."""
+    """Create directory structure for a session.
+
+    Args:
+        session: Session to create structure for
+        base_dir: Base directory for organizing files
+        dry_run: If True, don't actually create any files or directories
+        use_hardlinks: If True, use hard links, if False use copies. If None, determine automatically.
+    """
     logger = logging.getLogger(__name__)
     logger.debug(f"Creating session structure in {base_dir}")
 
@@ -119,6 +129,17 @@ def create_session_structure(
         jpeg_dir.mkdir(parents=True, exist_ok=True)
         logger.debug(f"Created directories: {image_dir}, {video_dir}, and {jpeg_dir}")
 
+        # Determine if we should use hardlinks if not explicitly specified
+        if use_hardlinks is None:
+            # Check using the first file in the first group as reference
+            if session.groups and session.groups[0].files:
+                first_file = session.groups[0].files[0].path
+                use_hardlinks = _are_on_same_device(first_file, base_dir)
+                logger.info(
+                    f"{'Using hardlinks' if use_hardlinks else 'Using file copies'} "
+                    f"based on device check"
+                )
+
     # Copy files to appropriate directories
     for group in session.groups:
         # Check for ORF+JPEG pairs
@@ -132,9 +153,7 @@ def create_session_structure(
                 # If this is a JPEG and we have an ORF file, put it in the jpeg_duplicates folder
                 if file is jpg_file and orf_file:
                     target_dir = jpeg_dir
-                    logger.debug(
-                        f"Found JPEG+ORF pair: {file.path.name} and {orf_file.path.name}"
-                    )
+                    logger.debug(f"Found JPEG+ORF pair: {file.path.name} and {orf_file.path.name}")
                 else:
                     target_dir = image_dir
 
@@ -145,7 +164,11 @@ def create_session_structure(
                 logger.debug(f"Copying {source.name} to {target}")
                 if target.exists():
                     target.unlink()
-                target.hardlink_to(source)
+
+                if use_hardlinks:
+                    target.hardlink_to(source)
+                else:
+                    shutil.copy2(source, target)
 
                 # Create symbolic link to ORF file if this is a JPEG duplicate
                 if file is jpg_file and orf_file:
@@ -156,6 +179,4 @@ def create_session_structure(
                     # Create relative symlink
                     rel_path = os.path.relpath(orf_target, jpeg_dir)
                     symlink_target.symlink_to(rel_path)
-                    logger.debug(
-                        f"Created symbolic link from {symlink_target} to {rel_path}"
-                    )
+                    logger.debug(f"Created symbolic link from {symlink_target} to {rel_path}")

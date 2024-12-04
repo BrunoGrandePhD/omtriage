@@ -6,7 +6,7 @@ from enum import Enum, auto
 from pathlib import Path
 from typing import List, Optional
 
-from .constants import SUPPORTED_FORMATS
+from .utils import get_file_format, is_image_file, is_video_file
 
 
 class SessionType(Enum):
@@ -65,17 +65,17 @@ class MediaFile:
     @property
     def format(self) -> str:
         """Get the file format (extension without dot, in lowercase)."""
-        return self.path.suffix.lower().lstrip(".")
+        return get_file_format(self.path)
 
     @property
     def is_image(self) -> bool:
         """Check if the file is an image."""
-        return self.format in SUPPORTED_FORMATS["images"]
+        return is_image_file(self.path)
 
     @property
     def is_video(self) -> bool:
         """Check if the file is a video."""
-        return self.format in SUPPORTED_FORMATS["videos"]
+        return is_video_file(self.path)
 
     @property
     def output_name(self) -> str:
@@ -112,7 +112,7 @@ class Session:
 
     groups: List[MediaGroup]
     type: SessionType
-    number: int = 1
+    number: Optional[int] = None
 
     @property
     def start_time(self) -> datetime:
@@ -123,6 +123,6 @@ class Session:
         """Format session directory name."""
         date_str = self.start_time.strftime("%Y-%m-%d")
         name = f"{date_str}-{self.type}"
-        if self.number > 1:
+        if self.number is not None:
             name += f"-{self.number}"
         return str(Path(base_dir) / name) if base_dir else name
