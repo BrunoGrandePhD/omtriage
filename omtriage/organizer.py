@@ -80,12 +80,13 @@ def organize_sessions(
 
 def _number_sessions(sessions: List[Session]) -> None:
     """Number sessions that occur on the same day."""
-    by_date: Dict[str, List[Session]] = {}
+    by_date_and_type: Dict[tuple[str, SessionType], List[Session]] = {}
     for session in sessions:
         date = session.start_time.date().isoformat()
-        by_date.setdefault(date, []).append(session)
+        key = (date, session.type)
+        by_date_and_type.setdefault(key, []).append(session)
 
-    for date_sessions in by_date.values():
+    for date_sessions in by_date_and_type.values():
         if len(date_sessions) > 1:
             for i, session in enumerate(date_sessions, 1):
                 session.number = i
