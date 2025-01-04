@@ -78,6 +78,10 @@ def import_files(
     metadata_extractor: Optional[MetadataExtractor] = None,
 ) -> None:
     """Import and organize media files."""
+    if not input_dir.exists():
+        logger.error(f"Input directory does not exist: {input_dir}")
+        return
+
     setup_logging(log_level)
     logger.info("Starting import:\n" f"  {input_dir} -> {output_dir}")
     logger.info(
@@ -94,10 +98,6 @@ def import_files(
     else:
         msg = "Input and output directories are on different drives, so copies will be created."
     logger.info(msg)
-
-    if not input_dir.exists():
-        logger.error(f"Input directory does not exist: {input_dir}")
-        return
 
     input_dir = Path(input_dir)
     output_dir = Path(output_dir)
