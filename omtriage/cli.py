@@ -128,7 +128,7 @@ def import_files(
 
     # Check import history
     skipped_count = 0
-    if not force_reimport and not dry_run:
+    if not force_reimport:
         original_count = len(files)
         files = [f for f in files if not db.is_file_imported(f)]
         skipped_count = original_count - len(files)
